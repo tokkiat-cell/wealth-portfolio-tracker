@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DatabaseNotConfigured, ensureSchema } from "./_lib/db";
+import { CLAUDE_MODELS, askClaude, hasClaudeKey } from "./_lib/anthropic";
 import { ask } from "./_lib/gemini";
 import { HttpError, Req, Res, assertSameOrigin, fail, readJson, send } from "./_lib/http";
 import { askOpenRouter, hasOpenRouterKey, listFreeModels } from "./_lib/openrouter";
@@ -25,7 +26,7 @@ Data notes: the summary mixes dates (each source has its own as-of date). Proper
 Style: direct, concise, with short headings and bullets. Show the key numbers you used. End with a one-line reminder that this is analysis, not advice, only when the answer touches a decision.`;
 
 const bodySchema = z.object({
-  provider: z.enum(["gemini", "openrouter"]).default("gemini"),
+  provider: z.enum(["gemini", "openrouter", "claude"]).default("gemini"),
   model: z.string().max(120).nullish(),
   messages: z
     .array(z.object({ role: z.enum(["user", "model"]), text: z.string().trim().min(1).max(4000) }))
@@ -44,7 +45,13 @@ export default async function handler(req: Req, res: Res) {
     if (req.method === "GET") {
       const openrouter = hasOpenRouterKey();
       const models = openrouter ? await listFreeModels().catch(() => []) : [];
-      return send(res, 200, { gemini: Boolean(process.env.GEMINI_API_KEY), openrouter, models });
+      return send(res, 200, {
+        gemini: Boolean(process.env.GEMINI_API_KEY),
+        openrouter,
+        models,
+        claude: hasClaudeKey(),
+        claudeModels: CLAUDE_MODELS,
+      });
     }
     if (req.method !== "POST") return fail(res, 405, "Method not allowed");
     assertSameOrigin(req);
@@ -62,6 +69,10 @@ export default async function handler(req: Req, res: Res) {
     if (provider === "openrouter") {
       const a = await askOpenRouter({ system, contents, model: model ?? null });
       return send(res, 200, { reply: a.text, sources: [], model: a.model, provider, searched: false });
+    }
+    if (provider === "claude") {
+      const a = await askClaude({ system, contents, model: model ?? null, search });
+      return send(res, 200, { reply: a.text, sources: a.sources, model: a.model, provider, searched: a.searched });
     }
     const a = await ask({ system, contents, search });
     return send(res, 200, { reply: a.text, sources: a.sources, model: a.model, provider, searched: a.searched });

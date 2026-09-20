@@ -20,6 +20,8 @@ const STARTERS = [
 ];
 
 const KEY_HELP: Record<ChatProvider, string> = {
+  claude:
+    "Create a key at console.anthropic.com (this is separate from a Claude.ai subscription and is billed per use), add it in Vercel as ANTHROPIC_API_KEY (Project → Settings → Environment Variables), then redeploy.",
   gemini: "Add GEMINI_API_KEY in Vercel (Project → Settings → Environment Variables), then redeploy.",
   openrouter:
     "Create a key at openrouter.ai/keys, add it in Vercel as OPENROUTER_API_KEY (Project → Settings → Environment Variables), then redeploy.",
@@ -88,8 +90,12 @@ function Rendered({ text }: { text: string }) {
 export function ChatPanel({ model, settings }: Props) {
   const [config, setConfig] = useState<ChatConfig | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
-  const [provider, setProvider] = useState<ChatProvider>(() => (store.get("wpt.chat.provider") === "openrouter" ? "openrouter" : "gemini"));
+  const [provider, setProvider] = useState<ChatProvider>(() => {
+    const p = store.get("wpt.chat.provider");
+    return p === "openrouter" || p === "claude" ? p : "gemini";
+  });
   const [orModel, setOrModel] = useState<string>(() => store.get("wpt.chat.orModel") ?? "");
+  const [claudeModel, setClaudeModel] = useState<string>(() => store.get("wpt.chat.claudeModel") ?? "");
   const [search, setSearch] = useState(() => store.get("wpt.chat.search") !== "0");
   const [share, setShare] = useState<ShareMode>(() => {
     const s = store.get("wpt.chat.share");
@@ -106,9 +112,15 @@ export function ChatPanel({ model, settings }: Props) {
       .chatConfig()
       .then((c) => {
         setConfig(c);
-        // Fall back to whichever provider has a key.
-        setProvider((p) => (p === "openrouter" && !c.openrouter && c.gemini ? "gemini" : p === "gemini" && !c.gemini && c.openrouter ? "openrouter" : p));
+        // Use Claude first when it is set up and nothing has been chosen yet; otherwise fall back to whichever provider has a key.
+        const has = (x: ChatProvider) => (x === "gemini" ? c.gemini : x === "claude" ? c.claude : c.openrouter);
+        setProvider((p) => {
+          if (!store.get("wpt.chat.provider") && c.claude) return "claude";
+          if (has(p)) return p;
+          return (["claude", "gemini", "openrouter"] as const).find(has) ?? p;
+        });
         setOrModel((m) => (c.models.some((x) => x.id === m) ? m : (c.models[0]?.id ?? "")));
+        setClaudeModel((m) => (c.claudeModels.some((x) => x.id === m) ? m : (c.claudeModels[0]?.id ?? "")));
       })
       .catch((e) => setConfigError(e instanceof ApiError ? e.message : "Could not reach the server."));
   }, []);
@@ -118,7 +130,7 @@ export function ChatPanel({ model, settings }: Props) {
   }, [messages, busy]);
 
   const context = useMemo(() => buildChatContext(model, settings, share), [model, settings, share]);
-  const ready = config ? (provider === "gemini" ? config.gemini : config.openrouter) : false;
+  const ready = config ? (provider === "gemini" ? config.gemini : provider === "claude" ? config.claude : config.openrouter) : false;
 
   const send = async (text: string) => {
     const question = text.trim();
@@ -134,13 +146,13 @@ export function ChatPanel({ model, settings }: Props) {
       while (history.length > 1 && history[0].role !== "user") history = history.slice(1);
       const r = await api.chat({
         provider,
-        model: provider === "openrouter" ? orModel || null : null,
+        model: provider === "openrouter" ? orModel || null : provider === "claude" ? claudeModel || null : null,
         messages: history,
         context,
-        search: provider === "gemini" && search,
+        search: provider !== "openrouter" && search,
       });
-      const note =
-        provider === "openrouter" && orModel && r.model !== orModel ? `Answered by ${r.model} because ${orModel} was busy.` : undefined;
+      const chosen = provider === "openrouter" ? orModel : provider === "claude" ? claudeModel : "";
+      const note = chosen && r.model !== chosen ? `Answered by ${r.model} because ${chosen} was busy.` : undefined;
       setMessages([...next, { role: "model", text: r.reply, sources: r.sources, note }]);
     } catch (e) {
       // Put the question back so nothing is lost and turns keep alternating.
@@ -177,10 +189,31 @@ export function ChatPanel({ model, settings }: Props) {
                 store.set("wpt.chat.provider", v);
               }}
             >
+              <option value="claude">Anthropic Claude</option>
               <option value="gemini">Google Gemini</option>
               <option value="openrouter">OpenRouter (free models)</option>
             </select>
           </label>
+
+          {provider === "claude" && (
+            <label className="field">
+              Claude model
+              <select
+                value={claudeModel}
+                onChange={(e) => {
+                  setClaudeModel(e.target.value);
+                  store.set("wpt.chat.claudeModel", e.target.value);
+                }}
+                disabled={!config?.claudeModels.length}
+              >
+                {(config?.claudeModels ?? []).map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
           {provider === "openrouter" && (
             <label className="field">
@@ -221,7 +254,7 @@ export function ChatPanel({ model, settings }: Props) {
           </label>
         </div>
 
-        {provider === "gemini" && (
+        {provider !== "openrouter" && (
           <label className="row" style={{ marginBottom: "0.5rem" }}>
             <input
               type="checkbox"
@@ -231,14 +264,19 @@ export function ChatPanel({ model, settings }: Props) {
                 store.set("wpt.chat.search", e.target.checked ? "1" : "0");
               }}
             />
-            <span className="muted">Let Gemini search the web for research (adds sources)</span>
+            <span className="muted">
+              Let {provider === "claude" ? "Claude" : "Gemini"} search the web for research (adds sources
+              {provider === "claude" ? ", and web search is billed extra by Anthropic" : ""})
+            </span>
           </label>
         )}
 
         <p className="notice">
           {provider === "gemini"
             ? "Your questions and the shared summary are sent to Google's Gemini API."
-            : "Your questions and the shared summary are sent to OpenRouter and on to the company that runs the chosen model. Free models can log prompts or use them for training, so prefer Percentages only and avoid names or numbers you would not want kept. No web search on free models."}{" "}
+            : provider === "claude"
+              ? "Your questions and the shared summary are sent to Anthropic's Claude API and billed to your Anthropic account."
+              : "Your questions and the shared summary are sent to OpenRouter and on to the company that runs the chosen model. Free models can log prompts or use them for training, so prefer Percentages only and avoid names or numbers you would not want kept. No web search on free models."}{" "}
           {shareHelp} Account numbers are never sent.
         </p>
 

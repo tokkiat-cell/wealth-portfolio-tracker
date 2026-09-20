@@ -44,11 +44,13 @@ export type SessionInfo = {
   canRegister: boolean;
 };
 
-export type ChatProvider = "gemini" | "openrouter";
+export type ChatProvider = "gemini" | "openrouter" | "claude";
 export type ChatConfig = {
   gemini: boolean;
   openrouter: boolean;
   models: { id: string; name: string; contextLength: number }[];
+  claude: boolean;
+  claudeModels: { id: string; name: string }[];
 };
 export type ChatReply = {
   reply: string;
