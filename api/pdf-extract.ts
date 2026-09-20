@@ -90,18 +90,12 @@ type GeminiResponse = {
   error?: { message?: string };
 };
 
-async function askGemini(pdf: Buffer): Promise<string> {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) {
-    throw new HttpError(
-      503,
-      "PDF reading needs a Gemini API key. Add GEMINI_API_KEY in Vercel's project settings.",
-      "GEMINI_NOT_CONFIGURED",
-    );
-  }
-  const model = process.env.GEMINI_MODEL || "gemini-flash-latest";
+// Statuses that mean "the model is overloaded or limited right now": worth trying another model.
+const BUSY = new Set([429, 500, 502, 503, 504]);
+
+async function callGemini(model: string, key: string, pdf: Buffer, timeoutMs: number): Promise<string> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 55_000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const r = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
@@ -128,7 +122,9 @@ async function askGemini(pdf: Buffer): Promise<string> {
     if (r.status === 400 || r.status === 403) {
       throw new HttpError(502, "Gemini rejected the request. Check the API key and that the PDF is not password protected.");
     }
-    if (r.status === 429) throw new HttpError(429, "Gemini's free quota is used up for now. Wait a minute and try again.");
+    if (BUSY.has(r.status)) {
+      throw new HttpError(r.status === 429 ? 429 : 503, data.error?.message ?? "Gemini is busy.", "GEMINI_BUSY");
+    }
     if (!r.ok) throw new HttpError(502, data.error?.message ?? "Gemini could not read that PDF.");
     if (data.promptFeedback?.blockReason) throw new HttpError(422, "Gemini declined to read that PDF.");
     const out = (data.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("");
@@ -137,12 +133,46 @@ async function askGemini(pdf: Buffer): Promise<string> {
   } catch (error) {
     if (error instanceof HttpError) throw error;
     if (error instanceof Error && error.name === "AbortError") {
-      throw new HttpError(504, "Reading took too long. Try a smaller PDF, or use a CSV.");
+      throw new HttpError(504, "Reading took too long. Try a smaller PDF, or use a CSV.", "GEMINI_BUSY");
     }
     throw error;
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Tries the main model, then backups, when Google says a model is busy. Stops before the
+// function's 60 second limit.
+async function askGemini(pdf: Buffer): Promise<string> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) {
+    throw new HttpError(
+      503,
+      "PDF reading needs a Gemini API key. Add GEMINI_API_KEY in Vercel's project settings.",
+      "GEMINI_NOT_CONFIGURED",
+    );
+  }
+  const models = [...new Set([process.env.GEMINI_MODEL || "gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite"])];
+  const deadline = Date.now() + 54_000;
+  let last: HttpError | null = null;
+  for (const model of models) {
+    const remaining = deadline - Date.now();
+    if (remaining < 10_000) break;
+    try {
+      return await callGemini(model, key, pdf, remaining);
+    } catch (error) {
+      if (error instanceof HttpError && error.code === "GEMINI_BUSY") {
+        last = error;
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new HttpError(
+    503,
+    `Google's Gemini is busy right now${last ? ` (${last.message})` : ""}. Wait a minute and try again.`,
+    "GEMINI_BUSY",
+  );
 }
 
 export default async function handler(req: Req, res: Res) {
