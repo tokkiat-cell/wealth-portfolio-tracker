@@ -282,11 +282,6 @@ export function ChatPanel({ model, settings }: Props) {
         </p>
 
         {config && !ready && <p className="notice error">This provider has no key yet. {KEY_HELP[provider]}</p>}
-
-        <details>
-          <summary>See exactly what is shared with each question</summary>
-          <pre className="chat-context">{context || "Nothing about your portfolio is shared."}</pre>
-        </details>
       </section>
 
       <section className="card chat">
