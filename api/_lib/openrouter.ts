@@ -17,7 +17,7 @@ type ModelsResponse = {
 };
 
 type ChatResponse = {
-  choices?: { message?: { content?: string | null } }[];
+  choices?: { message?: { content?: string | null }; finish_reason?: string | null }[];
   error?: { message?: string; code?: number | string };
 };
 
@@ -97,7 +97,9 @@ async function callModel(
         model,
         messages: contents.map((c) => ({ role: c.role === "model" ? "assistant" : "user", content: c.parts[0].text })),
         temperature: 0.3,
-        max_tokens: 3000,
+        // Reasoning models can spend the whole budget thinking and return an empty answer, so thinking is kept short.
+        reasoning: { effort: "low" },
+        max_tokens: 4500,
       }),
     });
     const data = (await r.json().catch(() => ({}))) as ChatResponse;
@@ -112,7 +114,10 @@ async function callModel(
       throw new HttpError(503, message + hint, "OPENROUTER_BUSY");
     }
     const text = (data.choices?.[0]?.message?.content ?? "").trim();
-    if (!text) throw new HttpError(503, `${model} returned nothing.`, "OPENROUTER_BUSY");
+    if (!text) {
+      const cut = data.choices?.[0]?.finish_reason === "length";
+      throw new HttpError(503, `${model} returned no answer${cut ? " (it ran out of tokens while thinking)" : ""}`, "OPENROUTER_BUSY");
+    }
     return text;
   } catch (error) {
     if (error instanceof HttpError) throw error;
