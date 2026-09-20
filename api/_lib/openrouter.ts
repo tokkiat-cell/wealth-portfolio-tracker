@@ -21,6 +21,15 @@ type ChatResponse = {
   error?: { message?: string; code?: number | string };
 };
 
+// Some free models only run inside coding-agent apps and refuse a plain chat.
+const AGENT_ONLY = /^thinkingmachines\//;
+// Well-known makers first, so the default and the fallbacks are models that answer a plain chat.
+const PREFERRED = ["google/", "nvidia/", "meta-llama/", "openai/", "deepseek/", "qwen/", "mistralai/"];
+const rank = (id: string) => {
+  const i = PREFERRED.findIndex((p) => id.startsWith(p));
+  return i === -1 ? PREFERRED.length : i;
+};
+
 let cache: { at: number; models: FreeModel[] } | null = null;
 const TTL_MS = 10 * 60_000;
 
@@ -58,10 +67,11 @@ export async function listFreeModels(): Promise<FreeModel[]> {
         (m.pricing?.request == null || isZero(m.pricing.request)) &&
         // Router aliases and image/audio generators are not chat models.
         !m.id.startsWith("openrouter/") &&
+        !AGENT_ONLY.test(m.id) &&
         (m.architecture?.output_modalities ?? ["text"]).join() === "text",
     )
     .map((m) => ({ id: m.id as string, name: (m.name || m.id) as string, contextLength: m.context_length ?? 0 }))
-    .sort((a, b) => b.contextLength - a.contextLength || a.name.localeCompare(b.name));
+    .sort((a, b) => rank(a.id) - rank(b.id) || b.contextLength - a.contextLength || a.name.localeCompare(b.name));
   cache = { at: Date.now(), models };
   return models;
 }
@@ -135,7 +145,7 @@ export async function askOpenRouter(opts: {
   if (opts.model && !free.some((m) => m.id === opts.model)) {
     throw new HttpError(400, "That model is not on OpenRouter's free list.");
   }
-  const order = [...new Set([opts.model ?? free[0].id, ...free.slice(0, 6).map((m) => m.id)])].slice(0, 3);
+  const order = [...new Set([opts.model ?? free[0].id, ...free.slice(0, 8).map((m) => m.id)])].slice(0, 5);
 
   // Some free models refuse a separate system message, so the instructions go at the front of the first turn.
   const contents = opts.contents.map((c, i) =>
@@ -143,7 +153,7 @@ export async function askOpenRouter(opts: {
   );
 
   const deadline = Date.now() + 54_000;
-  let last: HttpError | null = null;
+  const errors: string[] = [];
   for (const model of order) {
     const remaining = deadline - Date.now();
     if (remaining < 8_000) break;
@@ -152,15 +162,16 @@ export async function askOpenRouter(opts: {
       return { text, model };
     } catch (error) {
       if (error instanceof HttpError && error.code === "OPENROUTER_BUSY") {
-        last = error;
+        errors.push(`${model}: ${error.message.slice(0, 180)}`);
         continue;
       }
       throw error;
     }
   }
+  // Every model's reason is shown, so a privacy setting or a rate limit is not hidden behind the last error.
   throw new HttpError(
     503,
-    `The free models are busy right now${last ? ` (${last.message})` : ""}. Wait a minute, or pick another model.`,
+    `No free model could answer just now. ${errors.join(" | ")}. Wait a minute, or pick another model.`,
     "OPENROUTER_BUSY",
   );
 }
