@@ -1,5 +1,7 @@
 import { HttpError } from "./http";
-import type { GeminiContent, Source } from "./gemini";
+
+export type ChatContent = { role: "user" | "model"; parts: { text: string }[] };
+export type Source = { title: string; url: string };
 
 // Anthropic's Claude API (console.anthropic.com). Pay per use with its own key: a Claude.ai subscription
 // does not include API access. Only the models listed here can be chosen, so the cost is predictable.
@@ -39,7 +41,7 @@ async function callModel(
   model: string,
   key: string,
   system: string,
-  contents: GeminiContent[],
+  contents: ChatContent[],
   search: boolean,
   timeoutMs: number,
 ): Promise<{ text: string; sources: Source[] }> {
@@ -108,7 +110,7 @@ async function callModel(
 
 export async function askClaude(opts: {
   system: string;
-  contents: GeminiContent[];
+  contents: ChatContent[];
   model: string | null;
   search: boolean;
 }): Promise<{ text: string; sources: Source[]; model: string; searched: boolean }> {

@@ -44,11 +44,7 @@ export type SessionInfo = {
   canRegister: boolean;
 };
 
-export type ChatProvider = "gemini" | "openrouter" | "claude";
 export type ChatConfig = {
-  gemini: boolean;
-  openrouter: boolean;
-  models: { id: string; name: string; contextLength: number }[];
   claude: boolean;
   claudeModels: { id: string; name: string }[];
 };
@@ -56,7 +52,6 @@ export type ChatReply = {
   reply: string;
   sources: { title: string; url: string }[];
   model: string;
-  provider: ChatProvider;
   searched: boolean;
 };
 
@@ -82,7 +77,6 @@ export const api = {
 
   chatConfig: () => request<ChatConfig>("/api/chat"),
   chat: (input: {
-    provider: ChatProvider;
     model: string | null;
     messages: { role: "user" | "model"; text: string }[];
     context: string;
