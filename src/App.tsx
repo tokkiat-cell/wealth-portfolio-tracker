@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AllocationDonut } from "./components/AllocationDonut";
+import { ChatPanel } from "./components/ChatPanel";
 import { DataManagePanel } from "./components/DataManagePanel";
 import { ImportPanel } from "./components/ImportPanel";
 import { LoansPanel } from "./components/LoansPanel";
@@ -12,7 +13,7 @@ import { format } from "./lib/format";
 import { buildPortfolioModel } from "./lib/portfolioModel";
 import { useOverview } from "./lib/useOverview";
 
-type Tab = "overview" | "savings" | "loans" | "investments" | "risk" | "import";
+type Tab = "overview" | "savings" | "loans" | "investments" | "risk" | "chat" | "import";
 type SortKey = "broker" | "name" | "assetClass" | "currency" | "sgd" | "plPct";
 
 const SOON_DAYS = 14;
@@ -286,6 +287,7 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
     { id: "loans", label: "Loans" },
     { id: "investments", label: "Investments" },
     { id: "risk", label: "Risk & rebalance" },
+    { id: "chat", label: "AI chat" },
     { id: "import", label: "Import" },
   ];
 
@@ -317,6 +319,7 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
           ) : (
             <RiskPanel model={model} settings={data.settings} onSaved={() => void refresh()} />
           ))}
+        {active === "chat" && <ChatPanel model={model} settings={data.settings} />}
         {active === "import" && (
           <>
             <PdfImportPanel onChanged={() => void refresh()} />

@@ -44,6 +44,20 @@ export type SessionInfo = {
   canRegister: boolean;
 };
 
+export type ChatProvider = "gemini" | "openrouter";
+export type ChatConfig = {
+  gemini: boolean;
+  openrouter: boolean;
+  models: { id: string; name: string; contextLength: number }[];
+};
+export type ChatReply = {
+  reply: string;
+  sources: { title: string; url: string }[];
+  model: string;
+  provider: ChatProvider;
+  searched: boolean;
+};
+
 export const api = {
   session: () => request<SessionInfo>("/api/auth"),
   login: (email: string, password: string) =>
@@ -63,6 +77,15 @@ export const api = {
 
   saveSettings: (settings: Settings) =>
     post<Settings>("/api/portfolio", { action: "saveSettings", ...settings }),
+
+  chatConfig: () => request<ChatConfig>("/api/chat"),
+  chat: (input: {
+    provider: ChatProvider;
+    model: string | null;
+    messages: { role: "user" | "model"; text: string }[];
+    context: string;
+    search: boolean;
+  }) => post<ChatReply>("/api/chat", input),
 
   // The PDF goes as the raw request body (no base64 overhead).
   extractPdf: (file: File) =>
