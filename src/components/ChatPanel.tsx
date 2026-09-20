@@ -142,7 +142,8 @@ export function ChatPanel({ model, settings }: Props) {
     setBusy(true);
     try {
       // Only the recent turns are sent, and the first must be the person's.
-      let history = next.slice(-12).map((m) => ({ role: m.role, text: m.text }));
+      // Earlier AI replies are trimmed so a long chat stays quick and cheap.
+      let history = next.slice(-12).map((m) => ({ role: m.role, text: m.role === "model" ? m.text.slice(0, 8000) : m.text }));
       while (history.length > 1 && history[0].role !== "user") history = history.slice(1);
       const r = await api.chat({
         provider,

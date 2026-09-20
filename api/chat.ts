@@ -28,8 +28,15 @@ Style: direct, concise, with short headings and bullets. Show the key numbers yo
 const bodySchema = z.object({
   provider: z.enum(["gemini", "openrouter", "claude"]).default("gemini"),
   model: z.string().max(120).nullish(),
+  // The AI's own earlier replies are sent back as history and can be long; only what the person types is capped at 4000.
   messages: z
-    .array(z.object({ role: z.enum(["user", "model"]), text: z.string().trim().min(1).max(4000) }))
+    .array(
+      z
+        .object({ role: z.enum(["user", "model"]), text: z.string().trim().min(1).max(20_000) })
+        .refine((m) => m.role === "model" || m.text.length <= 4000, {
+          message: "Your message can be at most 4000 characters.",
+        }),
+    )
     .min(1)
     .max(30),
   context: z.string().max(30_000).default(""),
@@ -56,7 +63,7 @@ export default async function handler(req: Req, res: Res) {
     if (req.method !== "POST") return fail(res, 405, "Method not allowed");
     assertSameOrigin(req);
 
-    const parsed = bodySchema.safeParse(await readJson(req, 200_000));
+    const parsed = bodySchema.safeParse(await readJson(req, 400_000));
     if (!parsed.success) return fail(res, 400, parsed.error.issues[0]?.message ?? "Invalid request");
     const { provider, model, messages, context, search } = parsed.data;
     if (messages[messages.length - 1].role !== "user") return fail(res, 400, "The last message must be yours.");
