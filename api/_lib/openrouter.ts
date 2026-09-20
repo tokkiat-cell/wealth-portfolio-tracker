@@ -25,10 +25,18 @@ type ChatResponse = {
 const AGENT_ONLY = /^thinkingmachines\//;
 // Well-known makers first, so the default and the fallbacks are models that answer a plain chat.
 const PREFERRED = ["google/", "nvidia/", "meta-llama/", "openai/", "deepseek/", "qwen/", "mistralai/"];
+// Answered plain chat questions quickly and kept to the analysis-only rules when tested, so it is the default.
+const PINNED = /^nvidia\/nemotron-3-super/;
 const rank = (id: string) => {
+  if (PINNED.test(id)) return -1;
   const i = PREFERRED.findIndex((p) => id.startsWith(p));
   return i === -1 ? PREFERRED.length : i;
 };
+
+// Models that just failed go to the back of the queue for a while, so one bad model does not slow every question.
+const failedAt = new Map<string, number>();
+const BAD_FOR_MS = 10 * 60_000;
+const recentlyFailed = (id: string) => (failedAt.get(id) ?? 0) > Date.now() - BAD_FOR_MS;
 
 let cache: { at: number; models: FreeModel[] } | null = null;
 const TTL_MS = 10 * 60_000;
@@ -150,7 +158,10 @@ export async function askOpenRouter(opts: {
   if (opts.model && !free.some((m) => m.id === opts.model)) {
     throw new HttpError(400, "That model is not on OpenRouter's free list.");
   }
-  const order = [...new Set([opts.model ?? free[0].id, ...free.slice(0, 8).map((m) => m.id)])].slice(0, 5);
+  // The chosen model goes first; the rest follow, with recently failed ones last.
+  const first = opts.model ?? free[0].id;
+  const rest = free.slice(0, 10).map((m) => m.id).filter((id) => id !== first);
+  const order = [first, ...rest.filter((id) => !recentlyFailed(id)), ...rest.filter(recentlyFailed)].slice(0, 5);
 
   // Some free models refuse a separate system message, so the instructions go at the front of the first turn.
   const contents = opts.contents.map((c, i) =>
@@ -164,9 +175,11 @@ export async function askOpenRouter(opts: {
     if (remaining < 8_000) break;
     try {
       const text = await callModel(model, key, contents, Math.min(remaining, 28_000));
+      failedAt.delete(model);
       return { text, model };
     } catch (error) {
       if (error instanceof HttpError && error.code === "OPENROUTER_BUSY") {
+        failedAt.set(model, Date.now());
         errors.push(`${model}: ${error.message.slice(0, 180)}`);
         continue;
       }
