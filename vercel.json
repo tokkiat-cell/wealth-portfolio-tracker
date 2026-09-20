@@ -1,7 +1,8 @@
 {
   "functions": {
     "api/pdf-extract.ts": { "maxDuration": 60 },
-    "api/chat.ts": { "maxDuration": 60 }
+    "api/chat.ts": { "maxDuration": 60 },
+    "api/ibkr-flex.ts": { "maxDuration": 60 }
   },
   "headers": [
     {

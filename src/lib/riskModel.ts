@@ -33,7 +33,7 @@ export const nonSgdPct = (rows: Lite[]) => {
 // Assets less debts, per currency. A positive net gains when that currency rises against SGD.
 export function netCurrency(model: PortfolioModel) {
   const assets = new Map<string, number>();
-  for (const r of [...model.holdings, ...model.savingsRows, ...model.retirementRows]) {
+  for (const r of [...model.holdings, ...model.savingsRows, ...model.retirementRows, ...model.propertyRows, ...model.cpfRows]) {
     if (r.sgd == null) continue;
     assets.set(r.currency, (assets.get(r.currency) || 0) + r.sgd);
   }

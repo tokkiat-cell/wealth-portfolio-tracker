@@ -36,6 +36,12 @@ export function buildChatContext(model: PortfolioModel, settings: Settings, mode
   }
   const mix = model.groups.byType.map((g) => `${g.label} ${p1(totals.assets ? (g.value / totals.assets) * 100 : 0)}${amt(g.value)}`);
   L.push(`- Asset mix: ${mix.join("; ")}.`);
+  if (totals.property > 0) {
+    L.push(
+      `- Property is the owner's own estimate, not a valuation. Mortgages are ${p1((totals.mortgages / totals.property) * 100)} of property value${amt(totals.mortgages)}.`,
+    );
+  }
+  if (totals.cpf > 0) L.push("- CPF is locked to CPF rules (housing, retirement, healthcare) and is not liquid.");
 
   const inv = liteRows(model, "investments");
   const all = liteRows(model, "all");

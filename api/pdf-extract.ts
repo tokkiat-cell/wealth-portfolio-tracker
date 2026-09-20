@@ -12,7 +12,7 @@ const INSTRUCTIONS = `You extract balances from Singapore bank and broker statem
 
 Shape:
 {"institution": string, "statementDate": "YYYY-MM-DD" or null,
- "sections": [{"kind": "holding" | "savings" | "retirement" | "loan", "accountLabel": string,
+ "sections": [{"kind": "holding" | "savings" | "retirement" | "loan" | "cpf", "accountLabel": string,
    "lines": [{"name": string, "symbol": string, "isin": string, "assetClass": string, "currency": "SGD",
      "quantity": number or null, "price": number or null, "valueLocal": number or null, "valueSgd": number or null,
      "plPct": number or null, "ratePct": number or null, "maturityDate": "YYYY-MM-DD" or null,
@@ -22,7 +22,7 @@ Shape:
 Rules:
 - Only balances, holdings and liabilities. No transactions, no marketing text, no terms.
 - Leave out personal details: names, addresses, phone numbers, relationship managers. Mask every account or card number to its last 4 characters, like "...1234". accountLabel is the masked account or portfolio.
-- kind "savings" = deposit, current, savings, multiplier and settlement cash accounts. kind "holding" = an investment portfolio (stocks, ETFs, REITs, funds, bonds, structured notes) plus the cash held inside it. kind "retirement" = SRS and CPFIS accounts, with their cash balance as a line whose assetClass is "Cash". kind "loan" = loans, mortgages, credit card balances and instalment plans.
+- kind "savings" = deposit, current, savings, multiplier and settlement cash accounts. kind "holding" = an investment portfolio (stocks, ETFs, REITs, funds, bonds, structured notes) plus the cash held inside it. kind "retirement" = SRS and CPFIS accounts, with their cash balance as a line whose assetClass is "Cash". kind "loan" = loans, mortgages, credit card balances and instalment plans. kind "cpf" = CPF balance statements: one line per account, named like "Ordinary Account (OA)", "Special Account (SA)", "MediSave Account (MA)" or "Retirement Account (RA)", with assetClass "CPF". Never put the CPF or NRIC number in the output.
 - One line per position, or per account and currency for deposits. For a deposit in a foreign currency put the balance in valueLocal and the statement's SGD equivalent in valueSgd.
 - valueSgd is the SGD value printed on the statement. For an SGD line, valueSgd equals valueLocal. Numbers are plain numbers with no commas or currency symbols.
 - Loans: values are NEGATIVE. ratePct is a percentage number (1.51 for 1.51%). maturityDate is the end of the current loan period, or the last instalment if stated. monthlyPayment is positive if stated. For a credit card use the new balance and put the minimum payment and due date in note. For an instalment plan use the remaining amount still to be billed.

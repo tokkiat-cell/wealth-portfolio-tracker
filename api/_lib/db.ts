@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS wpt.snapshots (
   user_id integer NOT NULL REFERENCES wpt.users(id) ON DELETE CASCADE,
   broker text NOT NULL,
   account_label text NOT NULL DEFAULT '',
-  kind text NOT NULL CHECK (kind IN ('holding', 'savings', 'retirement', 'loan')),
+  kind text NOT NULL CHECK (kind IN ('holding', 'savings', 'retirement', 'loan', 'property', 'cpf')),
   as_of date NOT NULL,
   source text NOT NULL DEFAULT '',
   imported_at timestamptz NOT NULL DEFAULT now(),
@@ -111,6 +111,12 @@ ALTER TABLE wpt.fx_rates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE wpt.settings ENABLE ROW LEVEL SECURITY;
 `;
 
+const ADD_KINDS = `
+ALTER TABLE wpt.snapshots DROP CONSTRAINT IF EXISTS snapshots_kind_check;
+ALTER TABLE wpt.snapshots ADD CONSTRAINT snapshots_kind_check
+  CHECK (kind IN ('holding', 'savings', 'retirement', 'loan', 'property', 'cpf'));
+`;
+
 let ready: Promise<void> | null = null;
 
 // Creates the tables the first time any request arrives. The setup script takes exclusive table locks
@@ -120,10 +126,16 @@ export function ensureSchema(): Promise<void> {
   if (!ready) {
     ready = (async () => {
       const sql = getDb();
-      const [{ ok }] = await sql<{ ok: boolean }[]>`
-        SELECT (to_regclass('wpt.settings') IS NOT NULL AND to_regclass('wpt.positions') IS NOT NULL) AS ok`;
-      if (ok) return;
-      await sql.unsafe(`SET LOCAL lock_timeout = '10s'; ${DDL}`);
+      const [{ ok, kindsOk }] = await sql<{ ok: boolean; kindsOk: boolean }[]>`
+        SELECT (to_regclass('wpt.settings') IS NOT NULL AND to_regclass('wpt.positions') IS NOT NULL) AS ok,
+               COALESCE((SELECT pg_get_constraintdef(oid) LIKE '%cpf%' FROM pg_constraint
+                         WHERE conname = 'snapshots_kind_check' AND conrelid = to_regclass('wpt.snapshots')), true) AS "kindsOk"`;
+      if (!ok) {
+        await sql.unsafe(`SET LOCAL lock_timeout = '10s'; ${DDL}`);
+        return;
+      }
+      // A database created before property and CPF existed only allows the first four types.
+      if (!kindsOk) await sql.unsafe(`SET LOCAL lock_timeout = '10s'; ${ADD_KINDS}`);
     })().catch((err) => {
       ready = null;
       throw err;

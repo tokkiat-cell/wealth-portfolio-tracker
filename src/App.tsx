@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { AllocationDonut } from "./components/AllocationDonut";
 import { ChatPanel } from "./components/ChatPanel";
 import { DataManagePanel } from "./components/DataManagePanel";
+import { IbkrPanel } from "./components/IbkrPanel";
 import { ImportPanel } from "./components/ImportPanel";
 import { LoansPanel } from "./components/LoansPanel";
 import { LoginPage } from "./components/LoginPage";
 import { PdfImportPanel } from "./components/PdfImportPanel";
+import { PropertyCpfPanel } from "./components/PropertyCpfPanel";
 import { RiskPanel } from "./components/RiskPanel";
 import { SavingsPanel } from "./components/SavingsPanel";
 import { ApiError, api, type SessionInfo } from "./lib/api";
@@ -13,7 +15,7 @@ import { format } from "./lib/format";
 import { buildPortfolioModel } from "./lib/portfolioModel";
 import { useOverview } from "./lib/useOverview";
 
-type Tab = "overview" | "savings" | "loans" | "investments" | "risk" | "chat" | "import";
+type Tab = "overview" | "savings" | "loans" | "property" | "investments" | "risk" | "chat" | "import";
 type SortKey = "broker" | "name" | "assetClass" | "currency" | "sgd" | "plPct";
 
 const SOON_DAYS = 14;
@@ -153,11 +155,27 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
           <span className="kpi-value">{format.money(totals.retirement)}</span>
           <span className="kpi-sub">SRS / CPFIS, SGD</span>
         </div>
+        {totals.cpf > 0 && (
+          <div className="kpi">
+            <span className="kpi-label">CPF</span>
+            <span className="kpi-value">{format.money(totals.cpf)}</span>
+            <span className="kpi-sub">OA, SA, MA, SGD</span>
+          </div>
+        )}
+        {totals.property > 0 && (
+          <div className="kpi">
+            <span className="kpi-label">Property</span>
+            <span className="kpi-value">{format.money(totals.property)}</span>
+            <span className="kpi-sub">your estimates, SGD</span>
+          </div>
+        )}
       </div>
 
       <p className="muted" style={{ marginBottom: "1rem" }}>
         Data dates: investments {format.date(asOf.investments)} · savings {format.date(asOf.savings)} · retirement{" "}
         {format.date(asOf.retirement)} · loans {format.date(asOf.loans)}
+        {totals.cpf > 0 && <> · CPF {format.date(asOf.cpf)}</>}
+        {totals.property > 0 && <> · property {format.date(asOf.property)}</>}
       </p>
 
       {(dueSoon.length > 0 || concentration.length > 0 || missingFx.length > 0) && (
@@ -189,9 +207,9 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
 
       <div className="grid">
         <AllocationDonut title="Assets by type" slices={groups.byType} />
-        <AllocationDonut title="Assets by class" slices={groups.byClass} />
-        <AllocationDonut title="Assets by currency" slices={groups.byCurrency} />
-        <AllocationDonut title="Assets by bank / broker" slices={groups.byBroker} />
+        <AllocationDonut title="Financial assets by class" slices={groups.byClass} />
+        <AllocationDonut title="Financial assets by currency" slices={groups.byCurrency} />
+        <AllocationDonut title="Financial assets by bank / broker" slices={groups.byBroker} />
       </div>
 
       <section className="card">
@@ -285,6 +303,7 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
     { id: "overview", label: "Overview" },
     { id: "savings", label: "Savings" },
     { id: "loans", label: "Loans" },
+    { id: "property", label: "Property & CPF" },
     { id: "investments", label: "Investments" },
     { id: "risk", label: "Risk & rebalance" },
     { id: "chat", label: "AI chat" },
@@ -312,6 +331,7 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
         {active === "overview" && (empty ? emptyNote : overview)}
         {active === "savings" && <SavingsPanel model={model} />}
         {active === "loans" && <LoansPanel model={model} />}
+        {active === "property" && <PropertyCpfPanel model={model} onChanged={() => void refresh()} />}
         {active === "investments" && (empty ? emptyNote : investments)}
         {active === "risk" &&
           (empty ? (
@@ -322,6 +342,7 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
         {active === "chat" && <ChatPanel model={model} settings={data.settings} />}
         {active === "import" && (
           <>
+            <IbkrPanel onChanged={() => void refresh()} />
             <PdfImportPanel onChanged={() => void refresh()} />
             <ImportPanel onChanged={() => void refresh()} />
             <DataManagePanel

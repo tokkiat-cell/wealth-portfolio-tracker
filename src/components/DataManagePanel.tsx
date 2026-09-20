@@ -175,7 +175,7 @@ export function DataManagePanel({ snapshots, fx, currencies, onChanged }: Props)
                   <tr key={s.id}>
                     <td>{s.broker}</td>
                     <td>{s.accountLabel || "–"}</td>
-                    <td>{{ holding: "Investments", savings: "Savings", retirement: "Retirement", loan: "Loans" }[s.kind]}</td>
+                    <td>{{ holding: "Investments", savings: "Savings", retirement: "Retirement", loan: "Loans", property: "Property", cpf: "CPF" }[s.kind]}</td>
                     <td>{format.date(s.asOf)}</td>
                     <td className="num">{s.lines}</td>
                     <td className="muted" style={{ maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }}>

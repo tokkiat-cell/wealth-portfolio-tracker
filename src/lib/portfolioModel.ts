@@ -35,11 +35,15 @@ export function buildPortfolioModel(data: Overview) {
   const savings = of("savings");
   const retirement = of("retirement");
   const loans = of("loan");
+  const property = of("property");
+  const cpf = of("cpf");
 
   const investmentsTotal = sum(holdings);
   const savingsTotal = sum(savings);
   const retirementTotal = sum(retirement);
-  const assets = investmentsTotal + savingsTotal + retirementTotal;
+  const propertyTotal = sum(property);
+  const cpfTotal = sum(cpf);
+  const assets = investmentsTotal + savingsTotal + retirementTotal + propertyTotal + cpfTotal;
   const owed = -sum(loans); // loans are stored as negative values
   const net = assets - owed;
 
@@ -89,11 +93,17 @@ export function buildPortfolioModel(data: Overview) {
     holdings,
     savingsRows: savings.slice().sort((a, b) => (b.sgd ?? 0) - (a.sgd ?? 0)),
     retirementRows: retirement.slice().sort((a, b) => (b.sgd ?? 0) - (a.sgd ?? 0)),
+    propertyRows: property.slice().sort((a, b) => (b.sgd ?? 0) - (a.sgd ?? 0)),
+    cpfRows: cpf,
     loanRows,
     totals: {
       investments: investmentsTotal,
       savings: savingsTotal,
       retirement: retirementTotal,
+      property: propertyTotal,
+      cpf: cpfTotal,
+      // Debts that are mortgages, so property equity can be shown.
+      mortgages: -sum(loans.filter((r) => /mortgage/i.test(r.assetClass))),
       assets,
       owed,
       net,
@@ -111,14 +121,18 @@ export function buildPortfolioModel(data: Overview) {
       investments: newest(holdings),
       savings: newest(savings),
       retirement: newest(retirement),
+      property: newest(property),
+      cpf: newest(cpf),
       loans: newest(loans),
-      latest: newest(rows),
+      latest: newest(rows.filter((r) => r.kind !== "property" && r.kind !== "cpf")),
     },
     groups: {
       byType: [
         { label: "Investments", value: investmentsTotal },
         { label: "Savings", value: savingsTotal },
         { label: "Retirement (SRS/CPFIS)", value: retirementTotal },
+        { label: "CPF", value: cpfTotal },
+        { label: "Property (estimates)", value: propertyTotal },
       ].filter((g) => g.value > 0),
       byClass: group(allAssets, (r) => r.assetClass),
       byCurrency: group(allAssets, (r) => r.currency),

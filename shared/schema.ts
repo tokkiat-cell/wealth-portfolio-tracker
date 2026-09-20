@@ -6,7 +6,8 @@ export const MAX_PDF_BYTES = 3.5 * 1024 * 1024;
 
 const money = z.number().finite().min(-1e15).max(1e15);
 
-export const kindSchema = z.enum(["holding", "savings", "retirement", "loan"]);
+// property and cpf are entered by hand: there is no statement to import for them.
+export const kindSchema = z.enum(["holding", "savings", "retirement", "loan", "property", "cpf"]);
 export type Kind = z.infer<typeof kindSchema>;
 
 export const positionSchema = z

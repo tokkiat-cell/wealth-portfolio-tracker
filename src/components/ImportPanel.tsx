@@ -6,7 +6,7 @@ import { format } from "../lib/format";
 import { toast } from "../lib/toast";
 import type { PositionInput } from "../../shared/schema";
 
-export const BROKERS = ["DBS", "DBS Vickers", "UOB", "SCB", "Moomoo", "IBKR", "Other"];
+export const BROKERS = ["DBS", "DBS Vickers", "UOB", "SCB", "Moomoo", "IBKR", "CPF", "Other"];
 const NONE = "__none";
 
 type Source = { name: string; text: string };
