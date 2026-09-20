@@ -1,6 +1,6 @@
 {
   "functions": {
-    "api/pdf-extract.ts": { "maxDuration": 60 },
+    "api/pdf-extract.ts": { "maxDuration": 180 },
     "api/chat.ts": { "maxDuration": 60 }
   },
   "headers": [

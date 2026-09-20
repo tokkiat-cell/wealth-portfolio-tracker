@@ -108,6 +108,91 @@ async function callModel(
   }
 }
 
+// Reads a PDF with Claude and returns its raw text answer. Used for statement import, where the answer is JSON.
+// Sonnet first for accuracy on the numbers, Haiku as a faster fallback when Sonnet is busy or slow.
+export async function askClaudeAboutPdf(opts: { system: string; prompt: string; pdf: Buffer }): Promise<string> {
+  const key = claudeKey();
+  if (!key) {
+    throw new HttpError(
+      503,
+      "PDF reading needs an Anthropic API key. Add ANTHROPIC_API_KEY in Vercel's project settings.",
+      "CLAUDE_NOT_CONFIGURED",
+    );
+  }
+  const data = opts.pdf.toString("base64");
+  const deadline = Date.now() + 170_000;
+  const errors: string[] = [];
+  for (const [i, model] of ["claude-sonnet-5", "claude-haiku-4-5-20251001"].entries()) {
+    const remaining = deadline - Date.now();
+    if (remaining < 15_000) break;
+    // The first model may use up to 110 seconds, so the fallback still has time.
+    const timeoutMs = i === 0 ? Math.min(remaining, 110_000) : remaining;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        signal: controller.signal,
+        headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({
+          model,
+          max_tokens: 16000,
+          system: opts.system,
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "document", source: { type: "base64", media_type: "application/pdf", data } },
+                { type: "text", text: opts.prompt },
+              ],
+            },
+          ],
+        }),
+      });
+      const body = (await r.json().catch(() => ({}))) as ClaudeResponse;
+      const message = body.error?.message;
+      if (r.status === 401 || r.status === 403) {
+        throw new HttpError(502, "Anthropic rejected the API key. Check ANTHROPIC_API_KEY in Vercel.", "CLAUDE_BAD_KEY");
+      }
+      if (SKIP.has(r.status)) {
+        errors.push(`${model}: ${(message ?? `status ${r.status}`).slice(0, 160)}`);
+        continue;
+      }
+      if (r.status === 400 || r.status === 413) {
+        throw new HttpError(
+          502,
+          `Claude could not read that PDF: ${message ?? "the request was rejected"}. Check that it is not password protected.`,
+        );
+      }
+      if (!r.ok) throw new HttpError(502, message ?? "Claude could not read that PDF.");
+      const text = (body.content ?? [])
+        .filter((b) => b.type === "text")
+        .map((b) => b.text ?? "")
+        .join("")
+        .trim();
+      if (body.stop_reason === "max_tokens") {
+        throw new HttpError(422, "That statement is too long to read in one go. Try a smaller PDF, or use a CSV.");
+      }
+      if (!text) throw new HttpError(422, "Claude returned nothing. Try again, or use a CSV.");
+      return text;
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      if (error instanceof Error && error.name === "AbortError") {
+        errors.push(`${model}: took too long`);
+        continue;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw new HttpError(
+    503,
+    `Claude is busy right now. ${errors.join(" | ")}. Wait a minute and try again.`,
+    "CLAUDE_BUSY",
+  );
+}
+
 export async function askClaude(opts: {
   system: string;
   contents: ChatContent[];

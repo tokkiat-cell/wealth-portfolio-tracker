@@ -49,11 +49,11 @@ export function PdfImportPanel({ onChanged }: Props) {
     <section className="card">
       <h3>Import a PDF statement</h3>
       <p className="muted">
-        Works with bank and broker statements (DBS, SCB, UOB and similar) and CPF balance statements. Google's Gemini
-        reads the PDF and lists the balances, holdings and loans it finds. You review them before anything is saved.
+        Works with bank and broker statements (DBS, SCB, UOB and similar) and CPF balance statements. Anthropic's
+        Claude reads the PDF and lists the balances, holdings and loans it finds. You review them before anything is saved.
       </p>
       <p className="notice" style={{ marginTop: "0.5rem" }}>
-        Privacy: the whole PDF is sent to Google's Gemini API, and statements contain personal details. The AI is told
+        Privacy: the whole PDF is sent to Anthropic's Claude API, and statements contain personal details. The AI is told
         to leave names, addresses and transactions out of its answer, and the PDF is not stored here. If you would
         rather not send it, use a CSV or an Obsidian note instead, which stay in your browser.
       </p>
@@ -68,7 +68,7 @@ export function PdfImportPanel({ onChanged }: Props) {
         onError={toast.error}
       />
 
-      {reading && <p>Reading {fileName}. This can take up to a minute.</p>}
+      {reading && <p>Reading {fileName}. This can take a minute or two for a long statement.</p>}
       {error && <p className="notice error">{error}</p>}
 
       {result && result.sections.length > 0 && (

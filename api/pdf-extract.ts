@@ -1,11 +1,12 @@
 import { z } from "zod";
+import { askClaudeAboutPdf } from "./_lib/anthropic";
 import { DatabaseNotConfigured, ensureSchema } from "./_lib/db";
 import { HttpError, Req, Res, assertSameOrigin, fail, readBody, send } from "./_lib/http";
 import { requireUser } from "./_lib/session";
 import { MAX_PDF_BYTES, kindSchema, positionSchema } from "../shared/schema";
 import type { ExtractedSection, ExtractedStatement } from "../shared/schema";
 
-// Reads a bank or broker statement PDF with Google's Gemini API (a key from aistudio.google.com).
+// Reads a bank or broker statement PDF with Anthropic's Claude API (the same ANTHROPIC_API_KEY as the chat).
 // Nothing is saved here: the browser shows the result and the user confirms the import.
 
 const INSTRUCTIONS = `You extract balances from Singapore bank and broker statements (DBS, POSB, UOB, Standard Chartered, Moomoo, Tiger Brokers, IBKR and similar). Reply with ONE JSON object and nothing else.
@@ -28,7 +29,8 @@ Rules:
 - Loans: values are NEGATIVE. ratePct is a percentage number (1.51 for 1.51%). maturityDate is the end of the current loan period, or the last instalment if stated. monthlyPayment is positive if stated. For a credit card use the new balance and put the minimum payment and due date in note. For an instalment plan use the remaining amount still to be billed.
 - assetClass must be one of: Equities, REITs, Funds, Fixed Income, Cash, Savings, Loans, Credit card, Instalment plan, Mortgage, Other. Use Savings for deposit accounts and REITs for REIT units.
 - plPct is unrealised P/L as a fraction of cost (-0.25 means -25%) when the statement shows it, otherwise null.
-- Never invent a number. If a value is not printed, use null. Mention anything unclear in notes.`;
+- Never invent a number. If a value is not printed, leave the field out. Mention anything unclear in notes.
+- To keep the reply short, leave out any field whose value would be null or an empty string. Reply with the JSON only: no code fence, no other text.`;
 
 const num = z.preprocess((v) => {
   if (v == null || v === "") return null;
@@ -82,107 +84,14 @@ const modelSchema = z.object({
   notes: z.array(text(300)).default([]),
 });
 
-const isPdf = (b: Buffer) => b.length > 5 && b.subarray(0, 5).toString("latin1") === "%PDF-";
-
-type GeminiResponse = {
-  candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
-  promptFeedback?: { blockReason?: string };
-  error?: { message?: string };
+// The JSON object inside the reply, even if it came wrapped in a code fence or a sentence.
+const jsonPart = (s: string) => {
+  const a = s.indexOf("{");
+  const b = s.lastIndexOf("}");
+  return a >= 0 && b > a ? s.slice(a, b + 1) : s;
 };
 
-// Statuses that mean "the model is overloaded or limited right now": worth trying another model.
-const BUSY = new Set([429, 500, 502, 503, 504]);
-
-async function callGemini(model: string, key: string, pdf: Buffer, timeoutMs: number): Promise<string> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-      {
-        method: "POST",
-        signal: controller.signal,
-        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: INSTRUCTIONS }] },
-          contents: [
-            {
-              role: "user",
-              parts: [
-                { inline_data: { mime_type: "application/pdf", data: pdf.toString("base64") } },
-                { text: "Extract the balances, holdings and liabilities from this statement as JSON." },
-              ],
-            },
-          ],
-          generationConfig: { responseMimeType: "application/json", temperature: 0 },
-        }),
-      },
-    );
-    const data = (await r.json().catch(() => ({}))) as GeminiResponse;
-    if (r.status === 400 || r.status === 403) {
-      throw new HttpError(502, "Gemini rejected the request. Check the API key and that the PDF is not password protected.");
-    }
-    // 404 means this model name is retired or not offered to this key: try the next one.
-    if (BUSY.has(r.status) || r.status === 404) {
-      throw new HttpError(r.status === 429 ? 429 : 503, data.error?.message ?? "Gemini is busy.", "GEMINI_BUSY");
-    }
-    if (!r.ok) throw new HttpError(502, data.error?.message ?? "Gemini could not read that PDF.");
-    if (data.promptFeedback?.blockReason) throw new HttpError(422, "Gemini declined to read that PDF.");
-    const out = (data.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("");
-    if (!out) throw new HttpError(422, "Gemini returned nothing. Try again, or use a CSV.");
-    return out;
-  } catch (error) {
-    if (error instanceof HttpError) throw error;
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new HttpError(504, "Reading took too long. Try a smaller PDF, or use a CSV.", "GEMINI_BUSY");
-    }
-    throw error;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-// Tries the main model, then backups, when Google says a model is busy. Stops before the
-// function's 60 second limit.
-async function askGemini(pdf: Buffer): Promise<string> {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) {
-    throw new HttpError(
-      503,
-      "PDF reading needs a Gemini API key. Add GEMINI_API_KEY in Vercel's project settings.",
-      "GEMINI_NOT_CONFIGURED",
-    );
-  }
-  // Backups are names Google lists for this key; the first is the newest alias.
-  const models = [
-    ...new Set([
-      process.env.GEMINI_MODEL || "gemini-flash-latest",
-      "gemini-3.6-flash",
-      "gemini-3.5-flash",
-      "gemini-flash-lite-latest",
-    ]),
-  ];
-  const deadline = Date.now() + 54_000;
-  let last: HttpError | null = null;
-  for (const model of models) {
-    const remaining = deadline - Date.now();
-    if (remaining < 10_000) break;
-    try {
-      return await callGemini(model, key, pdf, remaining);
-    } catch (error) {
-      if (error instanceof HttpError && error.code === "GEMINI_BUSY") {
-        last = error;
-        continue;
-      }
-      throw error;
-    }
-  }
-  throw new HttpError(
-    503,
-    `Google's Gemini is busy right now${last ? ` (${last.message})` : ""}. Wait a minute and try again.`,
-    "GEMINI_BUSY",
-  );
-}
+const isPdf = (b: Buffer) => b.length > 5 && b.subarray(0, 5).toString("latin1") === "%PDF-";
 
 export default async function handler(req: Req, res: Res) {
   try {
@@ -194,10 +103,14 @@ export default async function handler(req: Req, res: Res) {
     const pdf = await readBody(req, MAX_PDF_BYTES);
     if (!isPdf(pdf)) return fail(res, 400, "That file is not a PDF.");
 
-    const raw = await askGemini(pdf);
+    const raw = await askClaudeAboutPdf({
+      system: INSTRUCTIONS,
+      prompt: "Extract the balances, holdings and liabilities from this statement as JSON.",
+      pdf,
+    });
     let json: unknown;
     try {
-      json = JSON.parse(raw);
+      json = JSON.parse(jsonPart(raw));
     } catch {
       return fail(res, 422, "The AI reply could not be read. Try again, or use a CSV.");
     }
