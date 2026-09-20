@@ -26,8 +26,15 @@ const TTL_MS = 10 * 60_000;
 
 const isZero = (v: string | undefined) => v != null && Number(v) === 0;
 
+// Vercel variable names are case sensitive, so a name typed as OpenRouter_API_Key is accepted too.
+function openRouterKey(): string | undefined {
+  if (process.env.OPENROUTER_API_KEY) return process.env.OPENROUTER_API_KEY;
+  const name = Object.keys(process.env).find((k) => k.toUpperCase() === "OPENROUTER_API_KEY");
+  return name ? process.env[name] : undefined;
+}
+
 export function hasOpenRouterKey(): boolean {
-  return Boolean(process.env.OPENROUTER_API_KEY);
+  return Boolean(openRouterKey());
 }
 
 export async function listFreeModels(): Promise<FreeModel[]> {
@@ -115,7 +122,7 @@ export async function askOpenRouter(opts: {
   contents: GeminiContent[];
   model: string | null;
 }): Promise<{ text: string; model: string }> {
-  const key = process.env.OPENROUTER_API_KEY;
+  const key = openRouterKey();
   if (!key) {
     throw new HttpError(
       503,
