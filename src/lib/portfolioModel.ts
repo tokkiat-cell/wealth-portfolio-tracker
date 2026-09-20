@@ -44,12 +44,15 @@ export function buildPortfolioModel(data: Overview) {
   const net = assets - owed;
 
   const allAssets = [...holdings, ...savings, ...retirement];
-  const invested = [...holdings, ...retirement];
-  const investedTotal = investmentsTotal + retirementTotal;
+  // Positions only: cash and net-short lines (such as options) are not "holdings".
+  const investable = [...holdings, ...retirement].filter(
+    (r) => r.assetClass !== "Cash" && (r.sgd ?? 0) > 0,
+  );
+  const investedTotal = sum(investable);
 
   // The same security held in several places is combined.
   const combined = new Map<string, { name: string; where: string[]; value: number }>();
-  for (const r of invested) {
+  for (const r of investable) {
     if (r.sgd == null) continue;
     const k = (r.isin || r.symbol || r.name).toUpperCase();
     const c = combined.get(k) || { name: r.name, where: [], value: 0 };

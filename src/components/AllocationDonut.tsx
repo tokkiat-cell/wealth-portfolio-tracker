@@ -9,7 +9,10 @@ const money = (n: number) => Math.round(n).toLocaleString("en-SG");
 
 // Donut + legend. Every slice is also listed with its % and value, so colour is never the only cue.
 export function AllocationDonut({ title, slices }: Props) {
-  const total = slices.reduce((n, s) => n + s.value, 0);
+  // The ring only draws positive slices (a negative one, such as net short options, cannot be an arc).
+  // The legend still lists every slice, with its share of the positive total.
+  const ring = slices.filter((s) => s.value > 0);
+  const total = ring.reduce((n, s) => n + s.value, 0);
   let offset = 25; // start at 12 o'clock
 
   return (
@@ -21,7 +24,7 @@ export function AllocationDonut({ title, slices }: Props) {
         <div className="donut-wrap">
           <svg viewBox="0 0 42 42" className="donut" role="img" aria-label={title}>
             <circle className="track" cx="21" cy="21" r="15.9155" fill="none" strokeWidth="6" />
-            {slices.map((s, i) => {
+            {ring.map((s, i) => {
               const p = total ? (s.value / total) * 100 : 0;
               const seg = (
                 <circle
