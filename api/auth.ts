@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DatabaseNotConfigured, ensureSchema, getDb } from "./_lib/db";
+import { DatabaseNotConfigured, ensureSchema, getDb, guardDb } from "./_lib/db";
 import { HttpError, Req, Res, assertSameOrigin, fail, readJson, send } from "./_lib/http";
 import {
   clearedCookie,
@@ -45,7 +45,7 @@ export default async function handler(req: Req, res: Res) {
 
     if (req.method === "GET") {
       const user = await readSession(req);
-      const [{ n }] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM wpt.users`;
+      const [{ n }] = await guardDb(() => sql<{ n: number }[]>`SELECT count(*)::int AS n FROM wpt.users`);
       return send(res, 200, { user, canRegister: n === 0 });
     }
     if (req.method !== "POST") return fail(res, 405, "Method not allowed");

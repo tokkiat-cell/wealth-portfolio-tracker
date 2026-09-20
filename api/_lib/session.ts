@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, scrypt, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { getDb, getSigningSecret } from "./db";
+import { getDb, getSigningSecret, guardDb } from "./db";
 import type { Req } from "./http";
 import { HttpError } from "./http";
 
@@ -59,8 +59,12 @@ function readCookie(req: Req, name: string): string | null {
 
 export type SessionUser = { id: number; email: string; displayName: string };
 
-// Returns the signed-in user, or null.
-export async function readSession(req: Req): Promise<SessionUser | null> {
+// Returns the signed-in user, or null. A stuck database connection ends in a quick error, not a hang.
+export function readSession(req: Req): Promise<SessionUser | null> {
+  return guardDb(() => readSessionUnguarded(req));
+}
+
+async function readSessionUnguarded(req: Req): Promise<SessionUser | null> {
   const token = readCookie(req, COOKIE_NAME);
   if (!token) return null;
   const [payload, signature] = token.split(".");

@@ -1,5 +1,6 @@
 import postgres from "postgres";
 import { randomBytes } from "crypto";
+import { HttpError } from "./http";
 
 // Tables live in their own schema ("wpt") and have row level security switched on.
 // On Supabase this keeps them out of the public API even if a key ever leaks.
@@ -13,7 +14,39 @@ export class DatabaseNotConfigured extends Error {
   }
 }
 
+let lastUsed = 0;
+const IDLE_RECYCLE_MS = 12_000;
+
+function dropClient() {
+  const old = client;
+  client = null;
+  if (old) void old.end({ timeout: 0 }).catch(() => undefined);
+}
+
+// Runs database work with a time limit. A connection that died while the server instance was frozen
+// can hang forever, so on a timeout the connection is dropped and the next request opens a new one.
+export async function guardDb<T>(work: () => Promise<T>, ms = 12_000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          dropClient();
+          reject(new HttpError(503, "The database was slow to answer. Try again in a moment.", "DATABASE_SLOW"));
+        }, ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export function getDb() {
+  // A connection left idle while the instance was frozen is often dead, so use a fresh one.
+  const now = Date.now();
+  if (client && now - lastUsed > IDLE_RECYCLE_MS) dropClient();
+  lastUsed = now;
   if (client) return client;
   const raw = process.env.POSTGRES_URL || process.env.DATABASE_URL;
   if (!raw) throw new DatabaseNotConfigured();
@@ -117,14 +150,17 @@ ALTER TABLE wpt.snapshots ADD CONSTRAINT snapshots_kind_check
   CHECK (kind IN ('holding', 'savings', 'retirement', 'loan', 'property', 'cpf'));
 `;
 
-let ready: Promise<void> | null = null;
+let schemaOk = false;
+let pending: Promise<void> | null = null;
 
 // Creates the tables the first time any request arrives. The setup script takes exclusive table locks
 // and needs many round trips, so it only runs when the newest table is missing, and it gives up
-// on a lock after 10 seconds instead of hanging every request behind it.
+// on a lock after 10 seconds instead of hanging every request behind it. A stuck connection also gives up
+// after 15 seconds, so one bad connection cannot hold every later request.
 export function ensureSchema(): Promise<void> {
-  if (!ready) {
-    ready = (async () => {
+  if (schemaOk) return Promise.resolve();
+  if (!pending) {
+    pending = guardDb(async () => {
       const sql = getDb();
       const [{ ok, kindsOk }] = await sql<{ ok: boolean; kindsOk: boolean }[]>`
         SELECT (to_regclass('wpt.settings') IS NOT NULL AND to_regclass('wpt.positions') IS NOT NULL) AS ok,
@@ -136,12 +172,15 @@ export function ensureSchema(): Promise<void> {
       }
       // A database created before property and CPF existed only allows the first four types.
       if (!kindsOk) await sql.unsafe(`SET LOCAL lock_timeout = '10s'; ${ADD_KINDS}`);
-    })().catch((err) => {
-      ready = null;
-      throw err;
-    });
+    }, 15_000)
+      .then(() => {
+        schemaOk = true;
+      })
+      .finally(() => {
+        pending = null;
+      });
   }
-  return ready;
+  return pending;
 }
 
 let cachedSecret: string | null = null;

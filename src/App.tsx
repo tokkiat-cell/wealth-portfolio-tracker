@@ -360,15 +360,23 @@ export default function App() {
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
-  const load = () => {
+  // One quiet retry when the database was slow, since the next attempt gets a fresh connection.
+  const attempt = (retry: boolean) => {
     api
       .session()
       .then((s) => {
         setSession(s);
         setError(null);
       })
-      .catch((e) => setError(e instanceof ApiError ? e : new ApiError("Could not reach the server", 0)));
+      .catch((e) => {
+        if (retry && e instanceof ApiError && e.code === "DATABASE_SLOW") {
+          setTimeout(() => attempt(false), 500);
+          return;
+        }
+        setError(e instanceof ApiError ? e : new ApiError("Could not reach the server", 0));
+      });
   };
+  const load = () => attempt(true);
   useEffect(load, []);
 
   if (error?.code === "DATABASE_NOT_CONFIGURED") return <SetupNotice />;
