@@ -2,7 +2,7 @@ import { z } from "zod";
 import { DatabaseNotConfigured, ensureSchema, getDb } from "./_lib/db";
 import { HttpError, Req, Res, assertSameOrigin, fail, readJson, send } from "./_lib/http";
 import { requireUser } from "./_lib/session";
-import { fxSchema, importSchema } from "../shared/schema";
+import { fxSchema, importSchema, settingsSchema } from "../shared/schema";
 import type { BackupFile, Kind, Overview, PositionRow, SnapshotRow } from "../shared/schema";
 
 const num = (v: string | null): number | null => (v == null ? null : Number(v));
@@ -39,6 +39,7 @@ const bodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("import") }).merge(importSchema),
   z.object({ action: z.literal("deleteSnapshot"), id: z.number().int().positive() }),
   z.object({ action: z.literal("saveFx") }).merge(fxSchema),
+  z.object({ action: z.literal("saveSettings") }).merge(settingsSchema),
 ]);
 
 function toRow(p: PositionDb, s: SnapshotDb): PositionRow {
@@ -154,7 +155,12 @@ export default async function handler(req: Req, res: Res) {
         WHERE s.user_id = ${user.id} GROUP BY p.snapshot_id`;
       const lineCount = new Map(counts.map((c) => [c.snapshot_id, c.n]));
 
+      const settingsRows = await sql<{ data: unknown }[]>`
+        SELECT data FROM wpt.settings WHERE user_id = ${user.id}`;
+      const settings = settingsSchema.safeParse(settingsRows[0]?.data ?? {});
+
       const overview: Overview = {
+        settings: settings.success ? settings.data : settingsSchema.parse({}),
         positions: positions.map((p) => toRow(p, byId.get(p.snapshot_id)!)),
         snapshots: snaps
           .map(
@@ -195,6 +201,15 @@ export default async function handler(req: Req, res: Res) {
         VALUES (${user.id}, ${body.currency}, ${body.rate})
         ON CONFLICT (user_id, currency) DO UPDATE SET rate_to_sgd = EXCLUDED.rate_to_sgd`;
       return send(res, 200, { currency: body.currency, rate: body.rate });
+    }
+
+    if (body.action === "saveSettings") {
+      const data = { targets: body.targets, maxNonSgdPct: body.maxNonSgdPct, maxPositionPct: body.maxPositionPct };
+      await sql`
+        INSERT INTO wpt.settings (user_id, data)
+        VALUES (${user.id}, ${sql.json(data as unknown as Parameters<typeof sql.json>[0])})
+        ON CONFLICT (user_id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`;
+      return send(res, 200, data);
     }
 
     // import: re-importing the same broker + account + type + date replaces that snapshot.

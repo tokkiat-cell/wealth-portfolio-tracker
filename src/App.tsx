@@ -5,13 +5,14 @@ import { ImportPanel } from "./components/ImportPanel";
 import { LoansPanel } from "./components/LoansPanel";
 import { LoginPage } from "./components/LoginPage";
 import { PdfImportPanel } from "./components/PdfImportPanel";
+import { RiskPanel } from "./components/RiskPanel";
 import { SavingsPanel } from "./components/SavingsPanel";
 import { ApiError, api, type SessionInfo } from "./lib/api";
 import { format } from "./lib/format";
 import { buildPortfolioModel } from "./lib/portfolioModel";
 import { useOverview } from "./lib/useOverview";
 
-type Tab = "overview" | "savings" | "loans" | "investments" | "import";
+type Tab = "overview" | "savings" | "loans" | "investments" | "risk" | "import";
 type SortKey = "broker" | "name" | "assetClass" | "currency" | "sgd" | "plPct";
 
 const SOON_DAYS = 14;
@@ -284,6 +285,7 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
     { id: "savings", label: "Savings" },
     { id: "loans", label: "Loans" },
     { id: "investments", label: "Investments" },
+    { id: "risk", label: "Risk & rebalance" },
     { id: "import", label: "Import" },
   ];
 
@@ -309,6 +311,12 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
         {active === "savings" && <SavingsPanel model={model} />}
         {active === "loans" && <LoansPanel model={model} />}
         {active === "investments" && (empty ? emptyNote : investments)}
+        {active === "risk" &&
+          (empty ? (
+            emptyNote
+          ) : (
+            <RiskPanel model={model} settings={data.settings} onSaved={() => void refresh()} />
+          ))}
         {active === "import" && (
           <>
             <PdfImportPanel onChanged={() => void refresh()} />

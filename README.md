@@ -4,6 +4,7 @@ One place for your net worth, savings, loans, retirement accounts and investment
 
 - Import CSV files, Obsidian notes (markdown tables), pasted tables, or PDF statements.
 - Overview, Savings, Loans and Investments tabs. Loans show rate, maturity and estimated interest.
+- Risk & rebalance tab: currency exposure, net exposure with FX-move sensitivity (debts included), concentration, cash against loans due soon, a rebalance calculator against targets you set, and a what-if for a hypothetical position. It is descriptive analysis, not advice: every limit and target is the user's own.
 - Single owner: the first account created is the only one that can ever exist.
 - Runs on Vercel: a Vite/React front end, serverless functions in `api/`, and a Postgres database.
 

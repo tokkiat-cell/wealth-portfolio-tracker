@@ -92,6 +92,12 @@ CREATE TABLE IF NOT EXISTS wpt.fx_rates (
   PRIMARY KEY (user_id, currency)
 );
 
+CREATE TABLE IF NOT EXISTS wpt.settings (
+  user_id integer PRIMARY KEY REFERENCES wpt.users(id) ON DELETE CASCADE,
+  data jsonb NOT NULL DEFAULT '{}'::jsonb,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE INDEX IF NOT EXISTS snapshots_user_idx ON wpt.snapshots (user_id);
 CREATE INDEX IF NOT EXISTS positions_snapshot_idx ON wpt.positions (snapshot_id);
 CREATE INDEX IF NOT EXISTS login_attempts_email_idx ON wpt.login_attempts (email, attempted_at);
@@ -102,6 +108,7 @@ ALTER TABLE wpt.login_attempts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE wpt.snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE wpt.positions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE wpt.fx_rates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE wpt.settings ENABLE ROW LEVEL SECURITY;
 `;
 
 let ready: Promise<void> | null = null;

@@ -3,6 +3,7 @@ import type {
   ExtractedStatement,
   ImportInput,
   Overview,
+  Settings,
 } from "../../shared/schema";
 
 export class ApiError extends Error {
@@ -59,6 +60,9 @@ export const api = {
     post<{ deleted: number }>("/api/portfolio", { action: "deleteSnapshot", id }),
   saveFx: (currency: string, rate: number) =>
     post<{ currency: string; rate: number }>("/api/portfolio", { action: "saveFx", currency, rate }),
+
+  saveSettings: (settings: Settings) =>
+    post<Settings>("/api/portfolio", { action: "saveSettings", ...settings }),
 
   // The PDF goes as the raw request body (no base64 overhead).
   extractPdf: (file: File) =>

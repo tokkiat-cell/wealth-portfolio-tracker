@@ -84,10 +84,19 @@ export type SnapshotRow = {
   lines: number;
 };
 
+// The user's own targets and limits, kept in the database so every device sees them.
+export const settingsSchema = z.object({
+  targets: z.record(z.string().min(1).max(40), z.number().min(0).max(100)).default({}),
+  maxNonSgdPct: z.number().min(0).max(100).nullable().default(null),
+  maxPositionPct: z.number().min(0).max(100).nullable().default(null),
+});
+export type Settings = z.infer<typeof settingsSchema>;
+
 export type Overview = {
   positions: PositionRow[];
   snapshots: SnapshotRow[];
   fx: Record<string, number>;
+  settings: Settings;
 };
 
 export type ExtractedSection = {

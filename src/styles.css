@@ -155,6 +155,9 @@ summary { cursor: pointer; color: var(--primary); }
 .toast { background: var(--foreground); color: var(--background); padding: 0.6rem 1rem; border-radius: 0.6rem; font-size: 0.875rem; }
 .toast.error { background: var(--error); color: #fff; }
 
+.bar { height: 8px; background: var(--muted); border-radius: 4px; min-width: 80px; overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--primary); border-radius: 4px; }
+
 @media (max-width: 640px) {
   .header, .main { padding-left: 0.75rem; padding-right: 0.75rem; }
   .filters select, .filters input[type="search"] { width: 100%; }
