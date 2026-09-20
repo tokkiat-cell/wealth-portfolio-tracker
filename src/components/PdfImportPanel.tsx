@@ -13,6 +13,7 @@ const guessBroker = (institution: string) => {
   if (/standard chartered|scb/.test(t)) return "SCB";
   if (/uob|united overseas/.test(t)) return "UOB";
   if (/moomoo|futu/.test(t)) return "Moomoo";
+  if (/tiger/.test(t)) return "Tiger";
   if (/interactive|ibkr/.test(t)) return "IBKR";
   return "Other";
 };

@@ -8,7 +8,7 @@ import type { ExtractedSection, ExtractedStatement } from "../shared/schema";
 // Reads a bank or broker statement PDF with Google's Gemini API (a key from aistudio.google.com).
 // Nothing is saved here: the browser shows the result and the user confirms the import.
 
-const INSTRUCTIONS = `You extract balances from Singapore bank and broker statements (DBS, POSB, UOB, Standard Chartered, Moomoo, IBKR and similar). Reply with ONE JSON object and nothing else.
+const INSTRUCTIONS = `You extract balances from Singapore bank and broker statements (DBS, POSB, UOB, Standard Chartered, Moomoo, Tiger Brokers, IBKR and similar). Reply with ONE JSON object and nothing else.
 
 Shape:
 {"institution": string, "statementDate": "YYYY-MM-DD" or null,
