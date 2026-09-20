@@ -122,7 +122,8 @@ async function callGemini(model: string, key: string, pdf: Buffer, timeoutMs: nu
     if (r.status === 400 || r.status === 403) {
       throw new HttpError(502, "Gemini rejected the request. Check the API key and that the PDF is not password protected.");
     }
-    if (BUSY.has(r.status)) {
+    // 404 means this model name is retired or not offered to this key: try the next one.
+    if (BUSY.has(r.status) || r.status === 404) {
       throw new HttpError(r.status === 429 ? 429 : 503, data.error?.message ?? "Gemini is busy.", "GEMINI_BUSY");
     }
     if (!r.ok) throw new HttpError(502, data.error?.message ?? "Gemini could not read that PDF.");
@@ -152,7 +153,15 @@ async function askGemini(pdf: Buffer): Promise<string> {
       "GEMINI_NOT_CONFIGURED",
     );
   }
-  const models = [...new Set([process.env.GEMINI_MODEL || "gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite"])];
+  // Backups are names Google lists for this key; the first is the newest alias.
+  const models = [
+    ...new Set([
+      process.env.GEMINI_MODEL || "gemini-flash-latest",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash",
+      "gemini-flash-lite-latest",
+    ]),
+  ];
   const deadline = Date.now() + 54_000;
   let last: HttpError | null = null;
   for (const model of models) {
