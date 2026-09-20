@@ -113,16 +113,21 @@ ALTER TABLE wpt.settings ENABLE ROW LEVEL SECURITY;
 
 let ready: Promise<void> | null = null;
 
-// Creates the tables the first time any request arrives. Safe to run repeatedly.
+// Creates the tables the first time any request arrives. The setup script takes exclusive table locks
+// and needs many round trips, so it only runs when the newest table is missing, and it gives up
+// on a lock after 10 seconds instead of hanging every request behind it.
 export function ensureSchema(): Promise<void> {
   if (!ready) {
-    ready = getDb()
-      .unsafe(DDL)
-      .then(() => undefined)
-      .catch((err) => {
-        ready = null;
-        throw err;
-      });
+    ready = (async () => {
+      const sql = getDb();
+      const [{ ok }] = await sql<{ ok: boolean }[]>`
+        SELECT (to_regclass('wpt.settings') IS NOT NULL AND to_regclass('wpt.positions') IS NOT NULL) AS ok`;
+      if (ok) return;
+      await sql.unsafe(`SET LOCAL lock_timeout = '10s'; ${DDL}`);
+    })().catch((err) => {
+      ready = null;
+      throw err;
+    });
   }
   return ready;
 }
