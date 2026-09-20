@@ -78,9 +78,6 @@ export const api = {
   saveSettings: (settings: Settings) =>
     post<Settings>("/api/portfolio", { action: "saveSettings", ...settings }),
 
-  ibkrStatus: () => request<{ configured: boolean }>("/api/ibkr-flex"),
-  ibkrFetch: () => post<ExtractedStatement>("/api/ibkr-flex", {}),
-
   chatConfig: () => request<ChatConfig>("/api/chat"),
   chat: (input: {
     provider: ChatProvider;

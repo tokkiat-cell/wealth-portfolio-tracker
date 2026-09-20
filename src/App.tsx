@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { AllocationDonut } from "./components/AllocationDonut";
 import { ChatPanel } from "./components/ChatPanel";
 import { DataManagePanel } from "./components/DataManagePanel";
-import { IbkrPanel } from "./components/IbkrPanel";
 import { ImportPanel } from "./components/ImportPanel";
 import { LoansPanel } from "./components/LoansPanel";
 import { LoginPage } from "./components/LoginPage";
@@ -342,7 +341,6 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
         {active === "chat" && <ChatPanel model={model} settings={data.settings} />}
         {active === "import" && (
           <>
-            <IbkrPanel onChanged={() => void refresh()} />
             <PdfImportPanel onChanged={() => void refresh()} />
             <ImportPanel onChanged={() => void refresh()} />
             <DataManagePanel
