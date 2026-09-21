@@ -31,6 +31,11 @@ export function buildChatContext(model: PortfolioModel, settings: Settings, mode
     L.push(
       `- Net worth ${format.money(totals.net)}; assets ${format.money(totals.assets)}; debts ${format.money(totals.owed)} (${p1(totals.owedToAssets * 100)} of assets).`,
     );
+    if (totals.property > 0) {
+      L.push(
+        `- Financial net worth, without property and its mortgages: ${format.money(totals.financialNet)}; also without CPF: ${format.money(totals.financialNetExCpf)}.`,
+      );
+    }
   } else {
     L.push(`- Debts are ${p1(totals.owedToAssets * 100)} of assets.`);
   }

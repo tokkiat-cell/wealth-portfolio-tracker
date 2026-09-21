@@ -129,6 +129,15 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
           <span className="kpi-value">{format.money(totals.net)}</span>
           <span className="kpi-sub">assets less debts, SGD</span>
         </div>
+        {totals.property > 0 && (
+          <div className="kpi">
+            <span className="kpi-label">Financial net worth</span>
+            <span className="kpi-value">{format.money(totals.financialNet)}</span>
+            <span className="kpi-sub">
+              without property and its mortgages · also without CPF: {format.money(totals.financialNetExCpf)}
+            </span>
+          </div>
+        )}
         <div className="kpi">
           <span className="kpi-label">Total assets</span>
           <span className="kpi-value">{format.money(totals.assets)}</span>

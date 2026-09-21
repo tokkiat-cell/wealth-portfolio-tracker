@@ -46,6 +46,8 @@ export function buildPortfolioModel(data: Overview) {
   const assets = investmentsTotal + savingsTotal + retirementTotal + propertyTotal + cpfTotal;
   const owed = -sum(loans); // loans are stored as negative values
   const net = assets - owed;
+  // Debts that are mortgages, so property can be taken out together with the loans against it.
+  const mortgagesTotal = -sum(loans.filter((r) => /mortgage/i.test(r.assetClass)));
 
   const allAssets = [...holdings, ...savings, ...retirement];
   // Positions only: cash and net-short lines (such as options) are not "holdings".
@@ -102,8 +104,10 @@ export function buildPortfolioModel(data: Overview) {
       retirement: retirementTotal,
       property: propertyTotal,
       cpf: cpfTotal,
-      // Debts that are mortgages, so property equity can be shown.
-      mortgages: -sum(loans.filter((r) => /mortgage/i.test(r.assetClass))),
+      mortgages: mortgagesTotal,
+      // Net worth without property and the mortgages on it (and, in the second figure, without CPF too).
+      financialNet: net - (propertyTotal - mortgagesTotal),
+      financialNetExCpf: net - (propertyTotal - mortgagesTotal) - cpfTotal,
       assets,
       owed,
       net,
