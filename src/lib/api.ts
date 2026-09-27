@@ -66,11 +66,13 @@ export const api = {
   overview: () => request<Overview>("/api/portfolio"),
   backup: () => request<BackupFile>("/api/portfolio?all=1"),
   importSnapshot: (input: ImportInput) =>
-    post<{ snapshotId: number; inserted: number }>("/api/portfolio", { action: "import", ...input }),
+    post<{ snapshotId: number; inserted: number; fxUpdated: string[] }>("/api/portfolio", { action: "import", ...input }),
   deleteSnapshot: (id: number) =>
     post<{ deleted: number }>("/api/portfolio", { action: "deleteSnapshot", id }),
   saveFx: (currency: string, rate: number) =>
     post<{ currency: string; rate: number }>("/api/portfolio", { action: "saveFx", currency, rate }),
+  // Re-fetches live rates for every currency currently in use, from a public rate source (no key needed).
+  refreshFx: () => post<{ updated: string[]; fx: Record<string, number> }>("/api/portfolio", { action: "refreshFx" }),
 
   saveSettings: (settings: Settings) =>
     post<Settings>("/api/portfolio", { action: "saveSettings", ...settings }),

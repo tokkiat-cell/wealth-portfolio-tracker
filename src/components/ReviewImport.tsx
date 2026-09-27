@@ -36,6 +36,7 @@ export function ReviewImport({ result, initialBroker, source, from, flaggedBy, f
     setSaving(true);
     try {
       let n = 0;
+      const fxUpdated = new Set<string>();
       for (const [i, s] of result.sections.entries()) {
         if (skip[i]) continue;
         const r = await api.importSnapshot({
@@ -47,8 +48,12 @@ export function ReviewImport({ result, initialBroker, source, from, flaggedBy, f
           positions: s.positions,
         });
         n += r.inserted;
+        r.fxUpdated.forEach((c) => fxUpdated.add(c));
       }
-      toast.ok(`Imported ${n} lines ${from}.`);
+      toast.ok(
+        `Imported ${n} lines ${from}.` +
+          (fxUpdated.size > 0 ? ` Live rates refreshed: ${[...fxUpdated].join(", ")}.` : ""),
+      );
       onImported();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Import failed");

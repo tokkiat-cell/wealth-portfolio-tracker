@@ -100,6 +100,7 @@ export function ImportPanel({ onChanged }: Props) {
     setBusy(true);
     try {
       let n = 0;
+      const fxUpdated = new Set<string>();
       for (const kind of ["holding", "savings", "retirement", "loan"] as const) {
         if (groups[kind].length === 0) continue;
         const r = await api.importSnapshot({
@@ -111,8 +112,12 @@ export function ImportPanel({ onChanged }: Props) {
           positions: groups[kind],
         });
         n += r.inserted;
+        r.fxUpdated.forEach((c) => fxUpdated.add(c));
       }
-      toast.ok(`Imported ${n} lines from ${broker}.`);
+      toast.ok(
+        `Imported ${n} lines from ${broker}.` +
+          (fxUpdated.size > 0 ? ` Live rates refreshed: ${[...fxUpdated].join(", ")}.` : ""),
+      );
       reset();
       onChanged();
     } catch (e) {

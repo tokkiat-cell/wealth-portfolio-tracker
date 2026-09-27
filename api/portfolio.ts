@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DatabaseNotConfigured, ensureSchema, getDb } from "./_lib/db";
+import { fetchLiveRates } from "./_lib/fxRates";
 import { HttpError, Req, Res, assertSameOrigin, fail, readJson, send } from "./_lib/http";
 import { requireUser } from "./_lib/session";
 import { fxSchema, importSchema, settingsSchema } from "../shared/schema";
@@ -39,8 +40,22 @@ const bodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("import") }).merge(importSchema),
   z.object({ action: z.literal("deleteSnapshot"), id: z.number().int().positive() }),
   z.object({ action: z.literal("saveFx") }).merge(fxSchema),
+  z.object({ action: z.literal("refreshFx") }),
   z.object({ action: z.literal("saveSettings") }).merge(settingsSchema),
 ]);
+
+// Upserts whichever of the fetched rates apply; a currency Frankfurter doesn't cover is left untouched.
+async function saveLiveRates(sql: ReturnType<typeof getDb>, userId: number, currencies: string[]) {
+  const rates = await fetchLiveRates(currencies);
+  const entries = Object.entries(rates);
+  for (const [currency, rate] of entries) {
+    await sql`
+      INSERT INTO wpt.fx_rates (user_id, currency, rate_to_sgd)
+      VALUES (${userId}, ${currency}, ${rate})
+      ON CONFLICT (user_id, currency) DO UPDATE SET rate_to_sgd = EXCLUDED.rate_to_sgd`;
+  }
+  return entries.map(([currency]) => currency);
+}
 
 function toRow(p: PositionDb, s: SnapshotDb): PositionRow {
   return {
@@ -203,6 +218,22 @@ export default async function handler(req: Req, res: Res) {
       return send(res, 200, { currency: body.currency, rate: body.rate });
     }
 
+    if (body.action === "refreshFx") {
+      // Every currency in use: on a position now, or with a rate already saved.
+      const rows = await sql<{ currency: string }[]>`
+        SELECT DISTINCT p.currency FROM wpt.positions p
+        JOIN wpt.snapshots s ON s.id = p.snapshot_id
+        WHERE s.user_id = ${user.id}
+        UNION
+        SELECT currency FROM wpt.fx_rates WHERE user_id = ${user.id}`;
+      const updated = await saveLiveRates(sql, user.id, rows.map((r) => r.currency));
+      const fxRows = await sql<{ currency: string; rate_to_sgd: string }[]>`
+        SELECT currency, rate_to_sgd FROM wpt.fx_rates WHERE user_id = ${user.id}`;
+      const fx: Record<string, number> = {};
+      for (const r of fxRows) fx[r.currency] = Number(r.rate_to_sgd);
+      return send(res, 200, { updated, fx });
+    }
+
     if (body.action === "saveSettings") {
       const data = { targets: body.targets, maxNonSgdPct: body.maxNonSgdPct, maxPositionPct: body.maxPositionPct };
       await sql`
@@ -244,7 +275,10 @@ export default async function handler(req: Req, res: Res) {
       }
       return { snapshotId: snap.id, inserted: rows.length };
     });
-    return send(res, 200, result);
+    // Best-effort: refresh live rates for whatever currencies this import used. Never fails the import.
+    const currencies = [...new Set(body.positions.map((p) => p.currency))];
+    const fxUpdated = await saveLiveRates(sql, user.id, currencies).catch(() => []);
+    return send(res, 200, { ...result, fxUpdated });
   } catch (error) {
     if (error instanceof DatabaseNotConfigured) {
       return fail(res, 503, error.message, "DATABASE_NOT_CONFIGURED");
