@@ -250,6 +250,9 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
     </>
   );
 
+  const filteredTotal = rows.reduce((n, p) => n + (p.sgd ?? 0), 0);
+  const filteredMissingFx = rows.filter((p) => p.sgd == null).length;
+
   const investments = (
     <section className="card">
       <div className="filters">
@@ -272,6 +275,20 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
           {rows.length} of {model.holdings.length} lines
         </span>
       </div>
+
+      {broker !== "__all" && (
+        <div className="kpis" style={{ marginBottom: "0.75rem" }}>
+          <div className="kpi">
+            <span className="kpi-label">{broker}{q && ` · "${q}"`}</span>
+            <span className="kpi-value">{format.money(filteredTotal)}</span>
+            <span className="kpi-sub">
+              {rows.length} line{rows.length === 1 ? "" : "s"} · {format.share(filteredTotal, model.totals.investments)} of
+              investments
+              {filteredMissingFx > 0 && ` · ${filteredMissingFx} without an SGD value, excluded from this total`}
+            </span>
+          </div>
+        </div>
+      )}
       <div className="scroll">
         <table>
           <thead>
