@@ -282,8 +282,8 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
             <span className="kpi-label">{broker}{q && ` · "${q}"`}</span>
             <span className="kpi-value">{format.money(filteredTotal)}</span>
             <span className="kpi-sub">
-              {rows.length} line{rows.length === 1 ? "" : "s"} · {format.share(filteredTotal, model.totals.investments)} of
-              investments
+              SGD · {rows.length} line{rows.length === 1 ? "" : "s"} ·{" "}
+              {format.share(filteredTotal, model.totals.investments)} of investments
               {filteredMissingFx > 0 && ` · ${filteredMissingFx} without an SGD value, excluded from this total`}
             </span>
           </div>
